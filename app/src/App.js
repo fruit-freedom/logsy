@@ -24,7 +24,7 @@ const TasksList = () => {
     useEffect(() => {
         fetch('/api/tasks')
         .then(response => response.json())
-        .then(tasks => setTasks(tasks));
+        .then(tasks => setTasks(tasks.map(t => ({...t, start_time: (new Date(t.start_time)).toLocaleString() }))));
     }, []);
 
     return (
@@ -36,6 +36,7 @@ const TasksList = () => {
                         <TableRow>
                             <TableCell>Id</TableCell>
                             <TableCell align="right">Status</TableCell>
+                            <TableCell align="right">Start time</TableCell>
                             <TableCell align="right">Stacktrace</TableCell>
                         </TableRow>
                     </TableHead>
@@ -48,6 +49,7 @@ const TasksList = () => {
                         >
                             <TableCell component="th" scope="row">{task.id}</TableCell>
                             <TableCell align="right">{task.status}</TableCell>
+                            <TableCell align="right">{task.start_time }</TableCell>
                             <TableCell align="right" sx={{ maxWidth: '100px' }}>{task.stacktrace}</TableCell>
                         </TableRow>
                     ))}
@@ -79,17 +81,34 @@ const JSONTreeTheme = {
     base0F: '#ab7967'
 };
 
-const TaskViewTableRow = ({ object }) => {
-    const [open, setOpen] = useState(false);
-    const [json, setJson] = useState('');
+const JSONView = ({ object }) => {
+    const [json, setJson] = useState({});
 
     useEffect(() => {
-        if (open && !json)
-            fetch(`/api/storage/${object.path}`)
-            .then(response => response.json())
-            .then(json => setJson(json));
-            // .then(json => setJson(JSON.stringify(json)));
-    }, [open]);
+        fetch(`/api/storage/${object.path}`)
+        .then(response => response.json())
+        .then(json => setJson(json));
+    }, []);
+
+    return <JSONTree data={json} theme={JSONTreeTheme} />;
+}
+
+const ImageView = ({ object }) => {
+    return <img width={'400px'} src={`/api/storage/${object.path}`} />;
+}
+
+const ObjectView = ({ object }) => {
+    if (object.type == 'json')
+        return <JSONView object={object} />
+
+    if (object.type == 'image')
+        return <ImageView object={object} />
+
+    return <span>Unviewable object type {object.type}</span>
+};
+
+const TaskViewTableRow = ({ object }) => {
+    const [open, setOpen] = useState(false);
 
     return (
         <>
@@ -106,13 +125,15 @@ const TaskViewTableRow = ({ object }) => {
                 </TableCell>
                 <TableCell component="th" scope="row">{object.id}</TableCell>
                 <TableCell align="right">{object.path}</TableCell>
-                <TableCell align="right">{object.algorithm_name}</TableCell>
+                <TableCell align="right">{object.type}</TableCell>
+                <TableCell align="right"><strong>{object.algorithm_name}</strong></TableCell>
             </TableRow>
             <TableRow>
                 <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
                     <Collapse in={open} timeout="auto" unmountOnExit>
-                        <strong>JSON</strong>
-                        <JSONTree data={json} theme={JSONTreeTheme} />
+                        <Box display='flex' justifyContent='center' padding={4}>
+                            <ObjectView object={object}/>
+                        </Box>
                     </Collapse>
                 </TableCell>
             </TableRow>
@@ -155,6 +176,7 @@ const TaskView = () => {
                             <TableCell />
                             <TableCell>Id</TableCell>
                             <TableCell align="right">Path</TableCell>
+                            <TableCell align="right">Type</TableCell>
                             <TableCell align="right">Algorithm name</TableCell>
                         </TableRow>
                     </TableHead>

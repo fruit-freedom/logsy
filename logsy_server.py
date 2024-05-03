@@ -2,7 +2,8 @@ from contextlib import asynccontextmanager
 import uuid
 import os
 import enum
-import typing
+from typing import Annotated
+import datetime
 
 import fastapi
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -45,7 +46,12 @@ class Task(Base):
     stacktrace: Mapped[str] = mapped_column(nullable=True)
     source_code_id: Mapped[int] = mapped_column(ForeignKey("source_code.id"), nullable=True)
     inputs: Mapped[str] = mapped_column(JSON(), nullable=True)
+    start_time: Mapped[datetime.datetime] = mapped_column(sqlalchemy.DateTime(True))
 
+
+class ObjectTypeEnum(enum.Enum):
+    image = 'image'
+    json = 'json'
 
 class Object(Base):
     __tablename__ = "object"
@@ -54,8 +60,7 @@ class Object(Base):
     path: Mapped[str] = mapped_column()
     task_id: Mapped[int] = mapped_column(ForeignKey("task.id"))
     algorithm_name: Mapped[str] = mapped_column(nullable=True)
-    # data: Mapped[str] = mapped_column(JSON(), nullable=True)
-
+    type: Mapped[str] = mapped_column(ENUM(*(e.value for e in ObjectTypeEnum), name='object_type_enum'))
 
 
 # class Group(Base):
@@ -121,7 +126,8 @@ async def create_task(body: CreateTaskRequest):
         task = Task(
             status=TaskStatusEnum.created.value,
             source_code_id=body.source_code_id,
-            inputs=body.inputs
+            inputs=body.inputs,
+            start_time=datetime.datetime.now()
         )
         session.add(task)
     return task
@@ -179,15 +185,23 @@ async def update_task(task_id: int, body: UpdateTaskRequest = fastapi.Body()):
 @app.post('/api/objects')
 async def create_object(
     task_id: int,
-    data: bytes = fastapi.Form(),
-    algorithm_name: str = fastapi.Form(default=None)
+    file: fastapi.UploadFile,
+    type: Annotated[ObjectTypeEnum, fastapi.Form()],
+    algorithm_name: Annotated[str, fastapi.Form()] = None,
 ):
-    path = os.path.join('storage', f'{uuid.uuid4()}.json')
-    with open(path, 'w') as file:
-        file.write(data.decode())
+    _, file_extension = os.path.splitext(file.filename)
+    path = os.path.join('storage', f'{uuid.uuid4()}{file_extension}')
+
+    with open(path, 'wb') as outfile:
+        outfile.write(await file.read())
 
     async with async_session.begin() as session:
-        object = Object(task_id=task_id, path=path, algorithm_name=algorithm_name)
+        object = Object(
+            task_id=task_id,
+            path=path,
+            type=type.value,
+            algorithm_name=algorithm_name
+        )
         session.add(object)
     return object
 

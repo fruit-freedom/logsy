@@ -3,8 +3,6 @@ import json
 
 import aiohttp
 
-import log_types
-
 class Task:
     """
     Supported log types:
@@ -12,6 +10,7 @@ class Task:
     - Image file
     """
     id: int
+    inputs: dict
 
     def __init__(self, id: int = None, inputs: dict = None) -> None:
         self.id = id
@@ -29,30 +28,30 @@ class Task:
         Can be astraction of s3 storage or gRPC yield_channel
         """        
         params = { 'task_id': self.id } if self.id else { }
-        data = {
-            'data': json.dumps(payload),
-            'algorithm_name': algorithm_name
-        }
+
+        data = aiohttp.FormData()
+        data.add_field('algorithm_name', algorithm_name)
+        data.add_field('type', 'json')
+        data.add_field('file', json.dumps(payload), filename='object.json', content_type='application/json')
+
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             async with session.post('http://localhost:8000/api/objects', params=params, data=data) as response:
                 print(await response.json())
-
-    async def log(self, obj):
-        if isinstance(obj, log_types.GeoTiffPath):
-            pass
-        elif isinstance(obj, log_types.JSON):
-            pass
 
     async def log_image(
         self,
         image_path: str,
         algorithm_name: str = None
     ):
+        with open(image_path, 'rb') as file:
+            image_data = file.read()
+
         params = { 'task_id': self.id } if self.id else { }
-        data = {
-            'image_path': image_path,
-            'algorithm_name': algorithm_name
-        }
+        data = aiohttp.FormData()
+        data.add_field('algorithm_name', algorithm_name)
+        data.add_field('type', 'image')
+        data.add_field('file', image_data, filename=image_path, content_type='image')
+
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             async with session.post('http://localhost:8000/api/objects', params=params, data=data) as response:
                 print(await response.json())

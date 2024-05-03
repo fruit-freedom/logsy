@@ -8,6 +8,9 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
 import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 
 import {
     createBrowserRouter,
@@ -116,17 +119,19 @@ const TaskViewTableRow = ({ object }) => {
                 key={object.id}
                 sx={{ '&:last-child td, &:last-child th': { border: 0 }, '&:hover': { backgroundColor: '#e0e0e0' } }}
             >
-                <TableCell
-                    component="th"
-                    onClick={ () => setOpen(!open) }
-                    sx={{ userSelect: 'none' }}
-                >
-                    Open
+                <TableCell>
+                    <IconButton
+                        aria-label="expand row"
+                        size="small"
+                        onClick={() => setOpen(!open)}
+                    >
+                        {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                    </IconButton>                    
                 </TableCell>
                 <TableCell component="th" scope="row">{object.id}</TableCell>
-                <TableCell align="right">{object.path}</TableCell>
-                <TableCell align="right">{object.type}</TableCell>
                 <TableCell align="right"><strong>{object.algorithm_name}</strong></TableCell>
+                <TableCell align="right">{object.type}</TableCell>
+                <TableCell align="right">{object.path}</TableCell>
             </TableRow>
             <TableRow>
                 <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
@@ -175,9 +180,9 @@ const TaskView = () => {
                         <TableRow>
                             <TableCell />
                             <TableCell>Id</TableCell>
-                            <TableCell align="right">Path</TableCell>
-                            <TableCell align="right">Type</TableCell>
                             <TableCell align="right">Algorithm name</TableCell>
+                            <TableCell align="right">Type</TableCell>
+                            <TableCell align="right">Path</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>

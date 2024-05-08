@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import json
 import uuid
 import os
 import enum
@@ -14,10 +15,14 @@ from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy import ForeignKey, JSON
 import sqlalchemy
-from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy.dialects.postgresql import ENUM, JSON
 import pydantic
 import aiohttp
+import grpc
 
+import tiler_pb2_grpc
+import tiler_pb2
+import settings
 
 class Base(AsyncAttrs, DeclarativeBase):
     pass
@@ -49,31 +54,37 @@ class Task(Base):
     start_time: Mapped[datetime.datetime] = mapped_column(sqlalchemy.DateTime(True))
 
 
-class ObjectTypeEnum(enum.Enum):
-    image = 'image'
-    json = 'json'
+class PathTypeEnum(enum.Enum):
+    relative = 'relative'
+    absolute = 'absolute'
+    url = 'url'
+
 
 class Object(Base):
     __tablename__ = "object"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     path: Mapped[str] = mapped_column()
+    path_type: Mapped[str] = mapped_column(sqlalchemy.Enum(PathTypeEnum), default=PathTypeEnum.absolute, nullable=False)
     task_id: Mapped[int] = mapped_column(ForeignKey("task.id"))
     algorithm_name: Mapped[str] = mapped_column(nullable=True)
-    type: Mapped[str] = mapped_column(ENUM(*(e.value for e in ObjectTypeEnum), name='object_type_enum'))
+    type: Mapped[str] = mapped_column(sqlalchemy.String(64))
+    meta: Mapped[str] = mapped_column(JSON(none_as_null=True))
+    preview_path: Mapped[str] = mapped_column
 
 
-# class Group(Base):
-#     __tablename__ = "group"
+class Group(Base):
+    __tablename__ = "group"
 
-#     id: Mapped[int] = mapped_column(primary_key=True)
-#     name: Mapped[str] = mapped_column(nullable=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("task.id"))
+    name: Mapped[str] = mapped_column(nullable=True)
 
 # class ObjectGroup(Base):
 #     __tablename__ = "object_group"
 
-#     id: Mapped[int] = mapped_column(primary_key=True)
-#     name: Mapped[str] = mapped_column(nullable=True)
+#     object_id: Mapped[int] = mapped_column(ForeignKey("object.id"))
+#     group_id: Mapped[int] = mapped_column(ForeignKey("group.id"))
 
 
 @asynccontextmanager
@@ -90,11 +101,13 @@ engine = create_async_engine(
     echo=True,
 )
 async_session = async_sessionmaker(engine, expire_on_commit=False)
+if not os.path.exists(settings.STORAGE_DIRECTORY):
+    os.makedirs(settings.STORAGE_DIRECTORY)
 
 
 @app.get('/api/storage/{filepath:path}')
 async def get_file(filepath: str):
-    return fastapi.responses.FileResponse(filepath)
+    return fastapi.responses.FileResponse(os.path.join(settings.STORAGE_DIRECTORY, filepath))
 
 
 class CreateTaskTemplateRequest(pydantic.BaseModel):
@@ -182,25 +195,55 @@ async def update_task(task_id: int, body: UpdateTaskRequest = fastapi.Body()):
         await session.execute(stmt)
 
 
+class ObjectTypeEnum(enum.Enum):
+    Image = 'image'
+    JSON = 'json'
+    XYZ = 'xyz'
+    GeoTiff = 'geotiff'
+
+
 @app.post('/api/objects')
 async def create_object(
     task_id: int,
-    file: fastapi.UploadFile,
     type: Annotated[ObjectTypeEnum, fastapi.Form()],
+    file: fastapi.UploadFile = None,
+    path: Annotated[str, fastapi.Form()] = None,
     algorithm_name: Annotated[str, fastapi.Form()] = None,
+    meta: Annotated[str, fastapi.Form()] = None,
 ):
-    _, file_extension = os.path.splitext(file.filename)
-    path = os.path.join('storage', f'{uuid.uuid4()}{file_extension}')
+    meta = json.loads(meta) if meta else {}
 
-    with open(path, 'wb') as outfile:
-        outfile.write(await file.read())
+    if file:
+        path_type = PathTypeEnum.absolute
+        _, file_extension = os.path.splitext(file.filename)
+        path = f'{uuid.uuid4()}{file_extension}'
+
+        with open(os.path.join(settings.STORAGE_DIRECTORY, path), 'wb') as outfile:
+            outfile.write(await file.read())
+    elif path:
+        path_type = PathTypeEnum.relative
+    else:
+        raise fastapi.HTTPException(422, detail="Path or file should be specified")
+
+    if type == ObjectTypeEnum.GeoTiff:
+        async with grpc.aio.insecure_channel("localhost:50051") as channel:
+            stub = tiler_pb2_grpc.TilerServiceStub(channel)
+            response: tiler_pb2.CreateTilesResponse = await stub.CreateTiles(tiler_pb2.CreateTilesRequest(path=path))
+            if response.error:
+                print(response.error)
+                raise fastapi.HTTPException(400, detail="can not tile geotiff")
+            print("Received: ", response)
+            meta = json.loads(response.meta)
+            meta['xyz'] = f'{response.path}/{{z}}/{{x}}/{{-y}}.{meta["extension"]}'
 
     async with async_session.begin() as session:
         object = Object(
             task_id=task_id,
             path=path,
             type=type.value,
-            algorithm_name=algorithm_name
+            algorithm_name=algorithm_name,
+            meta=meta,
+            path_type=path_type
         )
         session.add(object)
     return object
@@ -232,3 +275,40 @@ async def get_object(object_id: int):
         if not instance:
             raise fastapi.HTTPException(status_code=404)
         return fastapi.responses.FileResponse(instance.path)
+
+
+class CreateGroupRequest(pydantic.BaseModel):
+    task_id: int
+    name: str
+
+
+@app.post('/api/groups')
+async def create_group(request: CreateGroupRequest):
+
+    async with async_session.begin() as session:
+        group = Group(
+            task_id=request.task_id,
+            name=request.name
+        )
+        session.add(group)
+    return group
+
+
+@app.get('/api/groups')
+async def get_groups_list(task_id: int = None):
+    async with async_session.begin() as session:
+        stmt = sqlalchemy.select(Group)
+        if task_id:
+            stmt = stmt.where(Group.task_id == task_id)
+        result = await session.execute(stmt)
+        return result.scalars().all()
+
+
+@app.get('/api/groups/{group_id}')
+async def get_object(group_id: int):
+    async with async_session.begin() as session:
+        instance = await session.get(Group, group_id)
+        if not instance:
+            raise fastapi.HTTPException(status_code=404)
+        return instance
+    

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Box } from '@mui/material'
+import { Box, Typography } from '@mui/material'
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -11,7 +11,6 @@ import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-
 import {
     createBrowserRouter,
     RouterProvider,
@@ -19,6 +18,9 @@ import {
     useParams
 } from "react-router-dom";
 import { JSONTree } from 'react-json-tree'
+
+import OpenLayerTiffRender from './OpenLayerTiffRender';
+import { fromLonLat, transformExtent } from 'ol/proj';
 
 const TasksList = () => {
     const navigate = useNavigate();
@@ -100,6 +102,37 @@ const ImageView = ({ object }) => {
     return <img width={'400px'} src={`/api/storage/${object.path}`} />;
 }
 
+const XYZView = ({ object }) => {
+    
+    return <OpenLayerTiffRender
+        viewCenter={object.meta.center}
+        xyzSource={{
+            url: `/api/storage/${object.path}/{z}/{x}/{-y}.webp`,
+            tileSize: object.meta.tile_size,
+            minZoom: object.meta.min_zoom,
+            maxZoom: object.meta.max_zoom
+        }}
+        extent={object.meta.extent}
+    />
+}
+
+const GeoTiffView = ({ object }) => {
+    return (
+        <div>
+            <OpenLayerTiffRender
+                viewCenter={fromLonLat(object.meta.center)}
+                xyzSource={{
+                    url: `/api/storage/${object.meta.xyz}`,
+                    tileSize: object.meta.tile_size,
+                    minZoom: object.meta.min_zoom,
+                    maxZoom: object.meta.max_zoom
+                }}
+                extent={transformExtent(object.meta.extent, 'EPSG:4326', 'EPSG:3857')}
+            />
+        </div>       
+    );
+}
+
 const ObjectView = ({ object }) => {
     if (object.type == 'json')
         return <JSONView object={object} />
@@ -107,46 +140,16 @@ const ObjectView = ({ object }) => {
     if (object.type == 'image')
         return <ImageView object={object} />
 
+    if (object.type == 'xyz')
+        return <XYZView object={object} />
+
+    if (object.type == 'geotiff')
+        return <GeoTiffView object={object} />
+
     return <span>Unviewable object type {object.type}</span>
 };
 
-const TaskViewTableRow = ({ object }) => {
-    const [open, setOpen] = useState(false);
-
-    return (
-        <>
-            <TableRow
-                key={object.id}
-                sx={{ '&:last-child td, &:last-child th': { border: 0 }, '&:hover': { backgroundColor: '#e0e0e0' } }}
-            >
-                <TableCell>
-                    <IconButton
-                        aria-label="expand row"
-                        size="small"
-                        onClick={() => setOpen(!open)}
-                    >
-                        {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-                    </IconButton>                    
-                </TableCell>
-                <TableCell component="th" scope="row">{object.id}</TableCell>
-                <TableCell align="right"><strong>{object.algorithm_name}</strong></TableCell>
-                <TableCell align="right">{object.type}</TableCell>
-                <TableCell align="right">{object.path}</TableCell>
-            </TableRow>
-            <TableRow>
-                <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={6}>
-                    <Collapse in={open} timeout="auto" unmountOnExit>
-                        <Box display='flex' justifyContent='center' padding={4}>
-                            <ObjectView object={object}/>
-                        </Box>
-                    </Collapse>
-                </TableCell>
-            </TableRow>
-        </>
-    );
-};
-
-const TaskView = () => {
+const ObjectsView = () => {
     const { taskId } = useParams();
     const [task, setTask] = useState(null);
     const [objects, setObjects] = useState([]);
@@ -162,46 +165,53 @@ const TaskView = () => {
     }, []);
 
     return (
-        <Box display='flex' justifyContent='center' alignItems='center' flexDirection='column'>
-            <h1>Task {taskId}</h1>
-                {
-                    task ?
-                    <>
-                        <div>{task.status}</div>
-                        <JSONTree data={task.inputs} theme={JSONTreeTheme} />
-                        <div>{task.stacktrace}</div>
-                    </>
-                    : null
-                }
-            <h1>Objects</h1>
-            <TableContainer sx={{ width: '70vw' }} component={Paper}>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell />
-                            <TableCell>Id</TableCell>
-                            <TableCell align="right">Algorithm name</TableCell>
-                            <TableCell align="right">Type</TableCell>
-                            <TableCell align="right">Path</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                    {
-                        objects.map((object) => (
-                            <TaskViewTableRow key={object.id} object={object} />
-                        ))
-                    }
-                    </TableBody>
-                </Table>
-            </TableContainer>
-        </Box>
-    );
+        <div style={{ paddingBottom: '8em' }}>
+            <Box display='flex' justifyContent='center'>
+                <div>
+                    <h1>Task {taskId}</h1>
+                        {
+                            task ?
+                            <>
+                                <div>{task.status}</div>
+                                <JSONTree data={task.inputs} theme={JSONTreeTheme} />
+                                <div>{task.stacktrace}</div>
+                            </>
+                            : null
+                        }
+                    <h1>Objects</h1>
+                </div>
+            </Box>
+            {
+                objects.map(object => (
+                    <Box
+                        key={object.id}
+                        sx={{ borderTop: '2px dashed grey', padding: '0.5em' }}
+                        display={'flex'}
+                    >
+                        <Box padding={2} gap={2} color={'grey'} width={'40em'}>
+                            <Typography variant='body2'>Algorithm: {object.algorithm_name}</Typography>
+                            <Typography variant='body2'>ID: {object.id}</Typography>
+                            <Typography variant='body2'>Type: {object.type}</Typography>
+                            <Typography variant='body2'>Path: {object.path}</Typography>
+                            <Typography variant='body2'>Path type: {object.path_type}</Typography>
+                            <Typography variant='body2'>Meta: {JSON.stringify(object.meta)}</Typography>
+                        </Box>
+                        <Box width='100%'>
+                            <Box display='flex' justifyContent='center'>
+                                <ObjectView object={object}/>
+                            </Box>
+                        </Box>
+                    </Box>
+                ))
+            }
+        </div>
+    )
 };
 
 const router = createBrowserRouter([
     {
         path: "/tasks/:taskId",
-        element: <TaskView />,
+        element: <ObjectsView />,
     },
     {
         path: "*",

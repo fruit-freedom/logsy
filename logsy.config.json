@@ -1,0 +1,5 @@
+{
+    "serverUrl": "http://localhost:8000",
+    "basePath": "/storage",
+    "disableFilePassing": false
+}

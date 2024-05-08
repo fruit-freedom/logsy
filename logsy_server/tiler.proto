@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+service TilerService {
+    rpc CreateTiles(CreateTilesRequest) returns (CreateTilesResponse) {}
+}
+
+message CreateTilesRequest {
+    string path = 1;
+}
+
+message CreateTilesResponse {
+    string path = 1;
+    string meta = 2;
+    string tilemapresource_path = 3;
+    optional string error = 4;
+}

@@ -21,6 +21,38 @@ class Group:
                 print('Created group', body)
                 return Group(body['id'], body['task_id'], body['name'])
 
+
+class Object:
+    id: int
+    type: str
+    path: str
+    path_type: str
+    algorithm_name: str
+    meta: dict
+
+    def __init__(self, id: int, type: str, path: str, path_type: str, algorithm_name: str, meta: dict) -> None:
+        self.id = id
+        self.type = type
+        self.path = path
+        self.path_type = path_type
+        self.algorithm_name = algorithm_name
+        self.meta = meta
+
+    @staticmethod
+    async def get(task_id: int):
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            async with session.get(f'http://localhost:8000/api/tasks/{task_id}') as response:
+                body = await response.json()
+                return Object(
+                    body['id'],
+                    body['type'],
+                    body['path'],
+                    body['path_type'],
+                    body['algorithm_name'],
+                    body['meta']
+                )
+
+
 class Task:
     """
     Supported log types:
@@ -77,24 +109,23 @@ class Task:
             async with session.post('http://localhost:8000/api/objects', params=params, data=data) as response:
                 print(await response.json())
 
-    async def log_xyz(
-        self,
-        path: str,
-        algorithm_name: str = None,
-        meta: dict = None
-    ):
-        params = { 'task_id': self.id } if self.id else { }
-        data = aiohttp.FormData()
-        data.add_field('algorithm_name', algorithm_name)
-        data.add_field('type', 'xyz')
-        data.add_field('path', path)
-        if meta:
-            data.add_field('meta', json.dumps(meta))
+    # async def log_xyz(
+    #     self,
+    #     path: str,
+    #     algorithm_name: str = None,
+    #     meta: dict = None
+    # ):
+    #     params = { 'task_id': self.id } if self.id else { }
+    #     data = aiohttp.FormData()
+    #     data.add_field('algorithm_name', algorithm_name)
+    #     data.add_field('type', 'xyz')
+    #     data.add_field('path', path)
+    #     if meta:
+    #         data.add_field('meta', json.dumps(meta))
 
-        async with aiohttp.ClientSession(raise_for_status=False) as session:
-            async with session.post('http://localhost:8000/api/objects', params=params, data=data) as response:
-                print(await response.text())
-                # print(await response.json())
+    #     async with aiohttp.ClientSession(raise_for_status=False) as session:
+    #         async with session.post('http://localhost:8000/api/objects', params=params, data=data) as response:
+    #             print(await response.json())
 
     async def log_geotiff(
         self,
@@ -131,6 +162,13 @@ class Task:
             async with session.post('http://localhost:8000/api/tasks', json={ 'inputs': inputs }) as response:
                 body = await response.json()
                 print('Created task', body)
+                return Task(id=body['id'])
+
+    @staticmethod
+    async def get(task_id: int):
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            async with session.get(f'http://localhost:8000/api/tasks/{task_id}') as response:
+                body = await response.json()
                 return Task(id=body['id'])
 
     async def set_result(self):

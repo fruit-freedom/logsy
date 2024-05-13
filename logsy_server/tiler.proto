@@ -14,3 +14,18 @@ message CreateTilesResponse {
     string tilemapresource_path = 3;
     optional string error = 4;
 }
+
+
+service PreprocessingService {
+    rpc CreatePreview(CreatePreviewRequest) returns (CreatePreviewResponse) {}
+}
+
+message CreatePreviewRequest {
+    string path = 1;
+}
+
+message CreatePreviewResponse {
+    string preview_path = 1;
+    string meta = 2;
+    optional string error = 3;
+}

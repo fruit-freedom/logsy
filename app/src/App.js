@@ -7,10 +7,7 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
-import Collapse from '@mui/material/Collapse';
-import IconButton from '@mui/material/IconButton';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import { Tooltip } from '@mui/material';
 import {
     createBrowserRouter,
     RouterProvider,
@@ -99,7 +96,11 @@ const JSONView = ({ object }) => {
 }
 
 const ImageView = ({ object }) => {
-    return <img width={'400px'} src={`/api/storage/${object.path}`} />;
+    return (
+        <div style={{ cursor: 'pointer' }}>
+            <img width={'400px'} src={`/api/storage/${object.path}`} />
+        </div>
+    );
 }
 
 const XYZView = ({ object }) => {
@@ -192,7 +193,17 @@ const ObjectsView = () => {
                             <Typography variant='body2'>Algorithm: {object.algorithm_name}</Typography>
                             <Typography variant='body2'>ID: {object.id}</Typography>
                             <Typography variant='body2'>Type: {object.type}</Typography>
-                            <Typography variant='body2'>Path: {object.path}</Typography>
+                            <Typography variant='body2'>
+                                <span>Path: </span>
+                                <Tooltip
+                                    title={`${window.location.origin}/api/storage/${object.path}`}
+                                    placement="top-start"
+                                >
+                                    <span style={{ cursor: 'pointer' }}>
+                                        {object.path}
+                                    </span>
+                                </Tooltip>
+                            </Typography>
                             <Typography variant='body2'>Path type: {object.path_type}</Typography>
                             <Typography variant='body2'>Meta: {JSON.stringify(object.meta)}</Typography>
                         </Box>

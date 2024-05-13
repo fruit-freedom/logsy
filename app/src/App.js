@@ -18,6 +18,7 @@ import { JSONTree } from 'react-json-tree'
 
 import OpenLayerTiffRender from './OpenLayerTiffRender';
 import { fromLonLat, transformExtent } from 'ol/proj';
+import { getCenter } from 'ol/extent';
 
 const TasksList = () => {
     const navigate = useNavigate();
@@ -118,19 +119,20 @@ const XYZView = ({ object }) => {
 }
 
 const GeoTiffView = ({ object }) => {
+    const extent = transformExtent(object.meta.extent, 'EPSG:4326', 'EPSG:3857');
     return (
         <div>
             <OpenLayerTiffRender
-                viewCenter={fromLonLat(object.meta.center)}
+                viewCenter={getCenter(extent)}
                 xyzSource={{
                     url: `/api/storage/${object.meta.xyz}`,
                     tileSize: object.meta.tile_size,
                     minZoom: object.meta.min_zoom,
                     maxZoom: object.meta.max_zoom
                 }}
-                extent={transformExtent(object.meta.extent, 'EPSG:4326', 'EPSG:3857')}
+                extent={extent}
             />
-        </div>       
+        </div>
     );
 }
 

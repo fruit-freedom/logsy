@@ -13,11 +13,14 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import {
     createBrowserRouter,
+    Outlet,
     RouterProvider,
     useNavigate,
     useParams
 } from "react-router-dom";
 import { JSONTree } from 'react-json-tree'
+
+import Header from './components/Header';
 
 import OpenLayerTiffRender from './OpenLayerTiffRender';
 import { fromLonLat, transformExtent } from 'ol/proj';
@@ -210,20 +213,72 @@ const ObjectsView = () => {
     )
 };
 
+const ObjectsList = () => {
+    const [objects, setObjects] = useState([]);
+
+    useEffect(() => {
+        fetch(`/api/objects`)
+        .then(response => response.json())
+        .then(objects => setObjects(objects));
+    }, []);
+
+    return (
+        <Box>
+            {
+                objects.map(object => (
+                    <Box
+                        key={object.id}
+                        sx={{ borderTop: '2px dashed grey', padding: '0.5em' }}
+                        display={'flex'}
+                    >
+                        <Box padding={2} gap={2} color={'grey'} width={'40em'}>
+                            <Typography variant='body2'>Algorithm: {object.algorithm_name}</Typography>
+                            <Typography variant='body2'>ID: {object.id}</Typography>
+                            <Typography variant='body2'>Type: {object.type}</Typography>
+                            <Typography variant='body2'>Path: {object.path}</Typography>
+                            <Typography variant='body2'>Path type: {object.path_type}</Typography>
+                            <Typography variant='body2'>Meta: {JSON.stringify(object.meta)}</Typography>
+                        </Box>
+                        <Box width='100%'>
+                            <Box display='flex' justifyContent='center'>
+                                <ObjectView object={object}/>
+                            </Box>
+                        </Box>
+                    </Box>
+                ))
+            }
+        </Box>
+    );
+};
+
+const Layout = () => (
+    <>
+        <Header />
+        <Outlet />
+    </>
+);
+
 const router = createBrowserRouter([
     {
-        path: "/tasks/:taskId",
-        element: <ObjectsView />,
-    },
-    {
-        path: "*",
-        element: <TasksList />
-    },
+        element: <Layout />,
+        children: [
+            {
+                path: "/tasks/:taskId",
+                element: <ObjectsView />,
+            },
+            {
+                path: "/objects",
+                element: <ObjectsList />
+            },
+            {
+                path: "*",
+                element: <TasksList />
+            }
+        ]
+    }
 ]);
 
-
 function App() {
-
     return (
         <RouterProvider router={router} />
     );

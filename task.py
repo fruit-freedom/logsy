@@ -55,9 +55,13 @@ async def main(task: Task):
     await task.log_json({ 'report': { 'violation': True, 'lat': 65.124214, 'lon': 62.5235 } }, 'waste-postprocess')
     await task.set_result()
 
-    # task.binded_log(
-    #     Log(mask), Log(image)
-    # )
+
+async def main(task: Task):
+    print('[Task] Starting task')
+    await task.log_image(path='image.jpg', algorithm_name='Source image')
+    await task.log_image(file=open('image.jpg', 'rb'), algorithm_name='Source image')
+    with open('image.jpg', 'rb') as file:
+        await task.log_image(file_content=file.read(), algorithm_name='Source image')
 
 async def main(task: Task):
     # await task.log_xyz('tiles', 'Source image', meta={

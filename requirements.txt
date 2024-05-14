@@ -5,3 +5,4 @@ SQLAlchemy
 asyncpg
 aiohttp
 requests
+Pillow

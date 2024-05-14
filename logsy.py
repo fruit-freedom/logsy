@@ -1,7 +1,11 @@
 import typing
 import json
+import io
+import typing
 
 import aiohttp
+from PIL import Image
+
 
 class Group:
     id: int
@@ -58,6 +62,9 @@ class Task:
     Supported log types:
     - JSON
     - Image file
+
+    Can be astraction of s3 storage or gRPC yield_channel
+
     """
     id: int
     inputs: dict
@@ -69,41 +76,68 @@ class Task:
     async def create_group(self, name: str):
         return await Group.init(self.id, name)
 
+
     async def log_json(
         self,
-        payload: typing.Any,
-        algorithm_name: str = None
+        object: dict | list = None,
+        path: str = None,
+        file_content: str = None,
+        file: str = None,
+        algorithm_name: str = None,
+        meta: dict = {},
+        upload: bool = True
     ):
-        """
-        Interface
-        ---------
-        
-        Can be astraction of s3 storage or gRPC yield_channel
-        """
         params = { 'task_id': self.id } if self.id else { }
-
         data = aiohttp.FormData()
         data.add_field('algorithm_name', algorithm_name)
         data.add_field('type', 'json')
-        data.add_field('file', json.dumps(payload), filename='object.json', content_type='application/json')
+        data.add_field('meta', json.dumps(meta))
+
+        if object:
+            data.add_field('file', json.dumps(object), filename='file.json')
+        elif path:
+            if upload:
+                data.add_field('file', open(path, 'rb'), filename='file.json')
+            else:
+                data.add_field('path', path)
+        elif file_content:
+            data.add_field('file', file_content, filename='file.json')
+        elif file:
+            data.add_field('file', file, filename='file.json')
 
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             async with session.post('http://localhost:8000/api/objects', params=params, data=data) as response:
                 print(await response.json())
 
+
     async def log_image(
         self,
-        image_path: str,
-        algorithm_name: str = None
+        path: str = None,
+        file_content: str = None,
+        file: typing.BinaryIO = None,
+        algorithm_name: str = None,
+        meta: dict = {},
+        upload: bool = True
     ):
-        with open(image_path, 'rb') as file:
-            image_data = file.read()
-
         params = { 'task_id': self.id } if self.id else { }
         data = aiohttp.FormData()
         data.add_field('algorithm_name', algorithm_name)
         data.add_field('type', 'image')
-        data.add_field('file', image_data, filename=image_path, content_type='image')
+        data.add_field('meta', json.dumps(meta))
+
+        if path:
+            if upload:
+                extension = Image.open('image.jpg').format.lower()
+                data.add_field('file', open(path, 'rb'), filename=f'file.{extension}')
+            else:
+                data.add_field('path', path)
+        elif file_content:
+            extension = Image.open(io.BytesIO(file_content)).format.lower()
+            data.add_field('file', file_content, filename=f'file.{extension}')
+        elif file:
+            extension = Image.open(file).format.lower()
+            file.seek(0)
+            data.add_field('file', file, filename=f'file.{extension}')
 
         async with aiohttp.ClientSession(raise_for_status=True) as session:
             async with session.post('http://localhost:8000/api/objects', params=params, data=data) as response:
@@ -127,6 +161,7 @@ class Task:
     #         async with session.post('http://localhost:8000/api/objects', params=params, data=data) as response:
     #             print(await response.json())
 
+
     async def log_geotiff(
         self,
         path: str = None,
@@ -134,7 +169,7 @@ class Task:
         file: str = None,
         algorithm_name: str = None,
         meta: dict = {},
-        upload: bool = False,
+        upload: bool = True
     ):
         params = { 'task_id': self.id } if self.id else { }
         data = aiohttp.FormData()
@@ -183,3 +218,11 @@ class Task:
                 pass
 
     async def set_progress(self, progress: float): pass
+
+
+class Object:
+    @staticmethod
+    async def init():
+        async with aiohttp.ClientSession(raise_for_status=True) as session:
+            async with session.post('http://localhost:8000/api/objects') as response:
+                body = await response.json()
